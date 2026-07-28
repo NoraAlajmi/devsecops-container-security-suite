@@ -2,6 +2,57 @@
 
 A minimal Flask app used to demonstrate container security scanning and hardening (Trivy, Hadolint, Bandit, Docker Bench for Security).
 
+This is a portfolio project built to practice and showcase container security
+scanning skills for Cloud Security / DevSecOps roles. The app itself is
+intentionally trivial — the point is the security tooling and workflow around
+it, not the application logic.
+
+## How it works
+
+The app ships with **three intentional security flaws**, each tagged in the
+source with a `# INTENTIONAL FLAW:` comment so they're easy to find:
+
+1. An outdated, vulnerable base image pinned in the `Dockerfile`
+   (`python:3.9.0-slim`)
+2. No non-root `USER` directive in the `Dockerfile`, so the container runs as
+   root
+3. A Flask secret key hardcoded directly in `app.py`
+
+Each flaw is deliberately something a standard container security scanner
+should catch. [`findings.md`](findings.md) documents the results of actually
+running Trivy, Bandit, Hadolint, and Docker Bench for Security against this
+repo, including which tool caught which flaw (and a couple of surprises,
+like Hadolint *not* catching a missing `USER` directive the way we expected).
+
+## Project structure
+
+| File | Purpose |
+|------|---------|
+| `app.py` | Minimal Flask app with a home route and a `/health` check route |
+| `requirements.txt` | Python dependencies |
+| `Dockerfile` | Container build definition (contains flaws #1 and #2) |
+| `.env.example` | Template for environment variables the app expects |
+| `findings.md` | Scan results from each security tool |
+
+## Running locally
+
+```bash
+pip install -r requirements.txt
+python app.py
+```
+
+The app listens on `http://localhost:5000/` with a health check at
+`http://localhost:5000/health`.
+
+## Tools used
+
+- [Trivy](https://trivy.dev/) — image vulnerability scanning and Dockerfile
+  misconfiguration scanning
+- [Bandit](https://bandit.readthedocs.io/) — Python static security analysis
+- [Hadolint](https://github.com/hadolint/hadolint) — Dockerfile linting
+- [Docker Bench for Security](https://github.com/docker/docker-bench-security)
+  — CIS Docker benchmark auditing
+
 ## Known limitations
 
 - **Docker Bench for Security could not fully evaluate this project's image.** In the
