@@ -24,9 +24,9 @@ results are from the hardening commit that fixes all three flaws.
 | Hadolint | Dockerfile lint | 0 issues | 0 issues (no change — see note below) |
 | Docker Bench | CIS Docker benchmark | Host-level audit only (see limitation) | Host-level audit only (see limitation) |
 
-All three GitHub Actions CI jobs (Hadolint, Bandit, Trivy) are expected to
-be green on `main` once this commit is pushed — see "CI results" at the end
-of this document for the full timeline, including the run that verifies it.
+All three GitHub Actions CI jobs (Hadolint, Bandit, Trivy) are green on
+`main` — see "CI results" at the end of this document for the full
+timeline, including the run that verifies it.
 
 ---
 
@@ -167,6 +167,7 @@ access, so `docker build` succeeds there.
 |-----|------------|----------|--------|---------------------------|
 | [30359685096](https://github.com/NoraAlajmi/devsecops-container-security-suite/actions/runs/30359685096) — hardening commit, `python:3.14.6-slim` | Debian slim | ✅ PASS | ❌ FAIL (B104) | ❌ FAIL (4 CRITICAL in `perl-base`) |
 | [30360559278](https://github.com/NoraAlajmi/devsecops-container-security-suite/actions/runs/30360559278) — switched to `python:3.14-alpine` | Alpine | ✅ PASS | ❌ FAIL (B104) | ✅ PASS (0 vulnerabilities) |
+| [30360857528](https://github.com/NoraAlajmi/devsecops-container-security-suite/actions/runs/30360857528) — `# nosec B104` suppression | Alpine | ✅ PASS | ✅ PASS | ✅ PASS (0 vulnerabilities) |
 
-The Bandit job is expected to go green on the next run, following the
-`# nosec B104` suppression documented above.
+All three jobs passed on the third run — the first fully green run since
+the workflow was added.
