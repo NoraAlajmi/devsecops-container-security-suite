@@ -21,4 +21,6 @@ def health():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    # Binding to all interfaces is intentional: this runs inside a container, and
+    # 0.0.0.0 is what makes the exposed port reachable from outside the container.
+    app.run(host="0.0.0.0", port=5000)  # nosec B104
