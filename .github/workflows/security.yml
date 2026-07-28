@@ -1,0 +1,106 @@
+# Automated security scanning pipeline.
+#
+# This workflow runs three independent jobs every time code is pushed to
+# main, and on every pull request. Each job checks a different layer of the
+# app for the class of flaw it's designed to catch:
+#   1. lint-and-scan-dockerfile — Dockerfile best-practice linting (Hadolint)
+#   2. sast-scan                — Python source code security analysis (Bandit)
+#   3. build-and-scan-image     — builds the real image and scans it for
+#                                  known CVEs in the base OS/packages (Trivy)
+#
+# Jobs run in parallel by default (GitHub Actions doesn't serialize jobs
+# unless you tell it to with `needs:`), so all three scans happen at once.
+
+name: Security Scans
+
+# When this workflow runs.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    # No `branches:` filter here, so this runs for a PR targeting any branch.
+
+jobs:
+  # --------------------------------------------------------------------
+  # Job 1: lint the Dockerfile itself (no build required) with Hadolint.
+  # Catches Dockerfile anti-patterns, e.g. running as root, using ADD
+  # instead of COPY, missing pinned versions, etc.
+  # --------------------------------------------------------------------
+  lint-and-scan-dockerfile:
+    name: Lint Dockerfile (Hadolint)
+    runs-on: ubuntu-latest
+    steps:
+      # Every job starts with an empty runner, so we need to pull our repo's
+      # code onto it before anything else can reference it.
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      # hadolint-action runs the Hadolint binary against the given
+      # Dockerfile and fails the job (non-zero exit code) if any lint rule
+      # is violated.
+      - name: Run Hadolint against the Dockerfile
+        uses: hadolint/hadolint-action@v3.3.0
+        with:
+          dockerfile: Dockerfile
+
+  # --------------------------------------------------------------------
+  # Job 2: static application security testing (SAST) on the Python
+  # source with Bandit. Catches things like hardcoded secrets, use of
+  # eval(), insecure deserialization, etc. Runs against source code only —
+  # no build or container involved.
+  # --------------------------------------------------------------------
+  sast-scan:
+    name: Python SAST (Bandit)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      # Installs a specific Python version onto the runner so `pip` and
+      # `python` commands below have something to run against.
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      # Bandit isn't preinstalled on runners, so we install it via pip.
+      - name: Install Bandit
+        run: pip install bandit
+
+      # Run Bandit against app.py. Bandit exits non-zero when it finds
+      # issues at or above its default severity/confidence thresholds,
+      # which fails this job and shows up as a red X on the PR/commit.
+      - name: Run Bandit against app.py
+        run: bandit app.py
+
+  # --------------------------------------------------------------------
+  # Job 3: build the real Docker image (this is only possible here
+  # because GitHub-hosted runners have full outbound internet access,
+  # unlike the local sandbox used earlier in this project — pip install
+  # can actually reach PyPI here) and scan the built image for known
+  # vulnerabilities with Trivy.
+  # --------------------------------------------------------------------
+  build-and-scan-image:
+    name: Build image and scan with Trivy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      # Build the image from our Dockerfile and tag it with the commit SHA
+      # so the scan step below can reference this exact image.
+      - name: Build the Docker image
+        run: docker build -t devsecops-container-security-suite:${{ github.sha }} .
+
+      # trivy-action scans the image we just built for known CVEs in the
+      # OS packages and dependencies it contains. `severity: CRITICAL`
+      # limits what's reported/checked to only the most severe findings,
+      # and `exit-code: '1'` makes the action (and therefore this job)
+      # fail if any CRITICAL vulnerability is found — so a genuinely
+      # dangerous image can't silently pass CI.
+      - name: Scan the built image with Trivy
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: devsecops-container-security-suite:${{ github.sha }}
+          severity: CRITICAL
+          exit-code: "1"
