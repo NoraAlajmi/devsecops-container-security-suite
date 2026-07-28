@@ -9,20 +9,33 @@ it, not the application logic.
 
 ## How it works
 
-The app ships with **three intentional security flaws**, each tagged in the
-source with a `# INTENTIONAL FLAW:` comment so they're easy to find:
+This repo demonstrates a before/after security hardening workflow. The
+original scaffold intentionally shipped with three flaws, each tagged in
+git history with a `# INTENTIONAL FLAW:` comment:
 
 1. An outdated, vulnerable base image pinned in the `Dockerfile`
    (`python:3.9.0-slim`)
-2. No non-root `USER` directive in the `Dockerfile`, so the container runs as
+2. No non-root `USER` directive in the `Dockerfile`, so the container ran as
    root
 3. A Flask secret key hardcoded directly in `app.py`
 
-Each flaw is deliberately something a standard container security scanner
-should catch. [`findings.md`](findings.md) documents the results of actually
-running Trivy, Bandit, Hadolint, and Docker Bench for Security against this
-repo, including which tool caught which flaw (and a couple of surprises,
-like Hadolint *not* catching a missing `USER` directive the way we expected).
+All three have since been fixed on `main` — look for `# FIXED:` comments in
+`Dockerfile` and `app.py` marking each resolution (the base image was later
+switched again, to `python:3.14-alpine`, to eliminate a set of CRITICAL CVEs
+found in a transitive OS package). [`findings.md`](findings.md) documents
+the full before/after story: what each scanner found on the flawed version,
+how each flaw was fixed, and what the same scanners report now.
+
+## Continuous integration
+
+[![Security Scans](https://github.com/NoraAlajmi/devsecops-container-security-suite/actions/workflows/security.yml/badge.svg)](https://github.com/NoraAlajmi/devsecops-container-security-suite/actions/workflows/security.yml)
+
+`.github/workflows/security.yml` runs Hadolint, Bandit, and Trivy
+automatically on every push to `main` and every pull request, so a
+regression of any of these flaws (or a new one) gets caught in CI instead of
+relying on someone remembering to scan locally. See the
+[Actions tab](https://github.com/NoraAlajmi/devsecops-container-security-suite/actions)
+for run history.
 
 ## Project structure
 
@@ -30,9 +43,11 @@ like Hadolint *not* catching a missing `USER` directive the way we expected).
 |------|---------|
 | `app.py` | Minimal Flask app with a home route and a `/health` check route |
 | `requirements.txt` | Python dependencies |
-| `Dockerfile` | Container build definition (contains flaws #1 and #2) |
+| `Dockerfile` | Container build definition |
 | `.env.example` | Template for environment variables the app expects |
-| `findings.md` | Scan results from each security tool |
+| `.github/workflows/security.yml` | CI pipeline: Hadolint, Bandit, and Trivy on every push/PR |
+| `findings.md` | Scan results from each security tool, before and after hardening |
+| `LICENSE` | MIT license |
 
 ## Running locally
 
