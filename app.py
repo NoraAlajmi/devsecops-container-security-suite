@@ -1,10 +1,13 @@
+import os
+
 from flask import Flask
 
 app = Flask(__name__)
 
-# INTENTIONAL FLAW: hardcoded Flask secret key committed to source control.
-# Should be loaded from an environment variable or secrets manager instead.
-app.secret_key = "supersecret123"
+# FIXED: load the secret key from the environment (resolves flaw c) instead of
+# hardcoding it. No insecure default — this raises KeyError and fails loudly
+# if FLASK_SECRET_KEY isn't set, rather than silently falling back to something.
+app.secret_key = os.environ["FLASK_SECRET_KEY"]
 
 
 @app.route("/")

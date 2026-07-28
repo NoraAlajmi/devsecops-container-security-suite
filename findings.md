@@ -1,18 +1,33 @@
 # Security Scan Findings
 
-Summary of results from running each tool against this repo's intentionally
-flawed Flask app and Dockerfile. See `# INTENTIONAL FLAW:` comments in
-`app.py` and `Dockerfile` for the flaws being demonstrated.
+Summary of results from running each tool against this repo, before and
+after hardening. The "BEFORE" results are from the initial scaffold commit
+(`# INTENTIONAL FLAW:` comments in `app.py` / `Dockerfile`); the "AFTER"
+results are from the hardening commit that fixes all three flaws.
 
 ## Flaw-to-tool mapping
 
-| # | Flaw | Location | Detected by |
-|---|------|----------|-------------|
-| a | Outdated/vulnerable base image (`python:3.9.0-slim`) | `Dockerfile` | Trivy (`image` scan) |
-| b | No non-root `USER` directive | `Dockerfile` | Trivy (`config` scan) |
-| c | Hardcoded Flask secret key | `app.py` | Bandit |
+| # | Flaw | Location | Detected by | Status |
+|---|------|----------|-------------|--------|
+| a | Outdated/vulnerable base image (`python:3.9.0-slim`) | `Dockerfile` | Trivy (`image` scan) | Fixed → `python:3.14.6-slim` |
+| b | No non-root `USER` directive | `Dockerfile` | Trivy (`config` scan) | Fixed → `USER appuser` |
+| c | Hardcoded Flask secret key | `app.py` | Bandit | Fixed → loaded from `FLASK_SECRET_KEY` env var |
 
-## Trivy — config scan (`trivy config Dockerfile`)
+## Before/after comparison
+
+| Tool | Check | Before | After |
+|------|-------|--------|-------|
+| Trivy `config` | DS-0002 (missing non-root `USER`) | **FAIL (HIGH)** | **PASS** |
+| Trivy `image` | Base image CVEs | 126 vulns (26 CRITICAL, 100 HIGH) | 23 vulns (4 CRITICAL, 19 HIGH) |
+| Bandit | B105 (hardcoded secret) | **FAIL (Low/Medium)** | **PASS** |
+| Hadolint | Dockerfile lint | 0 issues | 0 issues (no change — see note below) |
+| Docker Bench | CIS Docker benchmark | Host-level audit only (see limitation) | Host-level audit only (see limitation) |
+
+---
+
+## BEFORE — initial scaffold (flawed version)
+
+### Trivy — config scan (`trivy config Dockerfile`)
 
 Static analysis of the Dockerfile itself.
 
@@ -23,7 +38,7 @@ Static analysis of the Dockerfile itself.
 
 Result: 2 failures out of 27 checks.
 
-## Trivy — image scan (`trivy image python:3.9.0-slim`)
+### Trivy — image scan (`trivy image python:3.9.0-slim`)
 
 Vulnerability scan of the pinned base image (Debian 10.6).
 
@@ -33,7 +48,7 @@ Vulnerability scan of the pinned base image (Debian 10.6).
 
 Confirms flaw (a).
 
-## Bandit (`bandit app.py`)
+### Bandit (`bandit app.py`)
 
 Static analysis of the Flask app source.
 
@@ -46,7 +61,7 @@ Static analysis of the Flask app source.
   all interfaces is expected for a containerized app (it's how the
   container's port gets exposed to the host).
 
-## Hadolint (`hadolint Dockerfile`)
+### Hadolint (`hadolint Dockerfile`)
 
 No issues found (exit code 0).
 
@@ -57,7 +72,7 @@ when there's no `USER` instruction at all. So despite the original plan,
 Hadolint is not an effective detector for flaw (b) as written; Trivy's
 config scan (DS-0002, above) covers that gap instead.
 
-## Docker Bench for Security
+### Docker Bench for Security
 
 Ran the official script directly against the Docker host (the bundled
 `docker/docker-bench-security` Docker Hub image ships a Docker CLI too old
@@ -75,3 +90,44 @@ without a built image its container-level checks (e.g. CIS 4.1, "Ensure a
 user for the container has been created") fell back to auditing unrelated
 pre-existing images on the host rather than this project's Dockerfile. See
 the "Known limitations" section in `README.md` for more detail.
+
+---
+
+## AFTER — hardened version
+
+### Trivy — config scan (`trivy config Dockerfile`)
+
+- **DS-0002 no longer fails** — the `USER appuser` directive resolves it.
+- **DS-0026 (LOW)** — missing `HEALTHCHECK` still present; this was never
+  one of the three intentional flaws, left as-is.
+
+Result: 1 failure out of 27 checks (down from 2).
+
+### Trivy — image scan (`trivy image python:3.14.6-slim`)
+
+- **23 vulnerabilities total: 4 CRITICAL, 19 HIGH** (down from 126 total /
+  26 CRITICAL / 100 HIGH on `python:3.9.0-slim`) — an ~82% reduction.
+- Not zero: current Debian-based images still carry some open CVEs at any
+  point in time (e.g. `perl-base`, `ncurses-base`, `util-linux` in this
+  scan) since new CVEs are disclosed continuously. Flaw (a) was about using
+  a *known-outdated, long-unpatched* pin, not about achieving zero CVEs —
+  that goal is met by tracking current stable tags going forward.
+
+### Bandit (`bandit app.py`)
+
+- **B105 no longer fires** — the secret key is now read from
+  `os.environ["FLASK_SECRET_KEY"]` with no hardcoded value in source.
+- **B104 (bind-all-interfaces)** still present, same as before — still
+  reviewed and accepted for the same reason (expected in a container).
+
+### Hadolint (`hadolint Dockerfile`)
+
+No issues found (exit code 0) — unchanged from before, since Hadolint never
+flagged either Dockerfile fix in the first place (see note in the BEFORE
+section).
+
+### Docker Bench for Security
+
+Same limitation as the BEFORE run: the hardened image also could not be
+built in this sandbox (no outbound network access during `docker build`),
+so Docker Bench still could not evaluate this project's actual image.
